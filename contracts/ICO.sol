@@ -2,6 +2,7 @@ pragma solidity ^0.4.18;
 
 import 'zeppelin-solidity/contracts/crowdsale/CappedCrowdsale.sol';
 import 'zeppelin-solidity/contracts/crowdsale/FinalizableCrowdsale.sol';
+import './Token.sol';
 
 contract ICO is CappedCrowdsale, FinalizableCrowdsale {
 
@@ -12,4 +13,14 @@ contract ICO is CappedCrowdsale, FinalizableCrowdsale {
   {
   }
 
+  function createTokenContract() internal returns (MintableToken) {
+    return new Token();
+  }
+
+  function finalization() internal {
+    uint256 leftOvers = cap - token.totalSupply();
+    if (leftOvers > 0) {
+      token.mint(wallet, leftOvers);
+    }
+  }
 }
