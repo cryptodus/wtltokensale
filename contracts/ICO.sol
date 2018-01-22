@@ -56,7 +56,9 @@ būtų paprasčiau. - čia dar nėra apibrėžta ar reikės whitelisted adresus 
         uint256 weiReq = rateChangeCountdown.div(rate);
         weiAmount -= weiReq;
         buyTokens(beneficiary, tokens, weiReq);
-        //TODO: new rate calc
+        rateChangeCountdown = rateChangeStep;
+        //TODO: fix rate change
+        rate = rate/10
       }
     }
   }
