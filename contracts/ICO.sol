@@ -4,7 +4,7 @@ import 'zeppelin-solidity/contracts/crowdsale/CappedCrowdsale.sol';
 import 'zeppelin-solidity/contracts/crowdsale/FinalizableCrowdsale.sol';
 import './Token.sol';
 
-contract ICO is FinalizableCrowdsale {
+contract Ico is FinalizableCrowdsale {
 /*
 
 2. Tokenų kainos dinamiškos - priklausys nuo parduoto kiekio. Token Sale pradžioje Smart
@@ -23,7 +23,7 @@ būtų paprasčiau. - čia dar nėra apibrėžta ar reikės whitelisted adresus 
   uint256 private constant INITIAL_RATE = 1000;
   uint256 private constant MIN_RATE = 1;
 
-  function ICO(uint256 _tokenCap, uint256 _startTime, uint256 _endTime,
+  function Ico(uint256 _tokenCap, uint256 _startTime, uint256 _endTime,
       address _wallet, uint256 _rateChangeStep) public
     FinalizableCrowdsale()
     Crowdsale(_startTime, _endTime, INITIAL_RATE, _wallet)
