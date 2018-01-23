@@ -19,7 +19,9 @@ būtų paprasčiau. - čia dar nėra apibrėžta ar reikės whitelisted adresus 
   uint256 public rateChangeStep;
   uint256 public rateChangeCountdown;
 
-  uint256 private constant INITIAL_RATE = 10**15;
+  uint256 private constant RATE_DECREASE = 100;
+  uint256 private constant INITIAL_RATE = 1000;
+  uint256 private constant MIN_RATE = 1;
 
   function ICO(uint256 _tokenCap, uint256 _startTime, uint256 _endTime,
       address _wallet, uint256 _rateChangeStep) public
@@ -46,25 +48,35 @@ būtų paprasčiau. - čia dar nėra apibrėžta ar reikės whitelisted adresus 
 
     uint256 weiAmount = msg.value;
 
-    while (weiAmount > 0) {
+    while (weiAmount > 0 || hasEnded()) {
+
       uint256 tokens = weiAmount.mul(rate);
-      if (rateChangeCountdown - tokens > 0) {
-        rateChangeCountdown -= tokens;
-        weiAmount = 0;
-        buyTokens(beneficiary, tokens, weiAmount);
+      uint256 weiReq = weiAmount;
+
+      if (rateChangeCountdown.sub(tokens) > 0) {
+        rateChangeCountdown = rateChangeCountdown.sub(tokens);
+      } else if (token.totalSupply().add(tokens) > tokenCap) {
+        tokens = tokenCap.sub(token.totalSupply());
+        weiReq = tokens.div(rate);
+        msg.sender.transfer(weiAmount);
       } else {
-        uint256 weiReq = rateChangeCountdown.div(rate);
-        weiAmount -= weiReq;
-        buyTokens(beneficiary, tokens, weiReq);
+        weiReq = rateChangeCountdown.div(rate);
         rateChangeCountdown = rateChangeStep;
-        //TODO: fix rate change
-        rate = rate/10
+        rate = rate.sub(RATE_DECREASE);
+        if (rate < MIN_RATE) {
+          rate = MIN_RATE;
+        }
       }
+
+      buyTokens(beneficiary, weiReq);
+      weiAmount = weiAmount.sub(weiReq);
     }
   }
 
-  function buyTokens(address beneficiary, uint256 tokens, uint256 weiAmount) private {
+  function buyTokens(address beneficiary, uint256 weiAmount) private {
     require(validPurchase());
+
+    uint256 tokens = weiAmount.mul(rate);
     weiRaised = weiRaised.add(weiAmount);
 
     token.mint(beneficiary, tokens);
