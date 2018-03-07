@@ -6,7 +6,7 @@ const should = require('chai')
   .should();
 
 const HardcapToken = artifacts.require("./HardcapToken")
-const HardcapCrowdsale = artifacts.require("./HardcapCrowdsale");
+const HardcapCrowdsale = artifacts.require("./HardcapCrowdsaleMock");
 
 contract('HardcapCrowdsaleTest', function (accounts) {
   let investor = accounts[0];
@@ -21,9 +21,16 @@ contract('HardcapCrowdsaleTest', function (accounts) {
   });
 
   describe('accepting payments', function () {
-    it('should not accept payments while not started', async function () {
+    it('should not accept payments before start date', async function () {
       this.crowdsale.should.exist;
+      this.crowdsale.setCurrentTime(new Date('2018-03-05').getTime());
 
+/*      let oTime = await this.crowdsale.openingTime();
+      let cTime = await this.crowdsale.closingTime();
+
+      console.log(new Date(oTime.toNumber()));
+      console.log(new Date(cTime.toNumber()));
+*/
       try {
           await this.crowdsale.send(ether(10));
           assert.fail('Expected reject not received');
@@ -31,34 +38,24 @@ contract('HardcapCrowdsaleTest', function (accounts) {
         assert(error.message.search('revert') > 0, 'Wrong error message received: ' + error.message);
       }
     });
-
-    it('should accept payments when unpaused', async function () {
+    it('should not accept payments after end date', async function () {
       this.crowdsale.should.exist;
-      this.token.should.exist;
-
-      await this.crowdsale.unpause();
-      await this.crowdsale.send(ether(1)).should.be.fulfilled;
-    });
-
-    it('should not accept payments when paused', async function () {
-      this.crowdsale.should.exist;
-      this.token.should.exist;
-
-      await this.crowdsale.unpause();
-      await this.crowdsale.send(ether(1)).should.be.fulfilled;
-      await this.crowdsale.pause();
+      this.crowdsale.setCurrentTime(new Date('2018-09-05').getTime());
       try {
-          await this.crowdsale.send(ether(1));
+          await this.crowdsale.send(ether(10));
           assert.fail('Expected reject not received');
       } catch (error) {
         assert(error.message.search('revert') > 0, 'Wrong error message received: ' + error.message);
       }
     });
-
+    it('should accept payments during ico time', async function () {
+      this.crowdsale.should.exist;
+      this.crowdsale.setCurrentTime(new Date('2018-03-28').getTime());
+      await this.crowdsale.send(ether(1)).should.be.fulfilled;
+    });
     it('should fail when sending 0 ethers', async function () {
       this.crowdsale.should.exist;
-
-      await this.crowdsale.unpause();
+      this.crowdsale.setCurrentTime(new Date('2018-03-28').getTime());
       try {
           await this.crowdsale.send(ether(0));
           assert.fail('Expected reject not received');
@@ -69,24 +66,32 @@ contract('HardcapCrowdsaleTest', function (accounts) {
   });
 
   describe('receiving tokens', function () {
-    it('should reveive correct amount (11500) of tokens when sending 1 ether for the 1\'st wave', async function () {
+    it('should not allow buy less than 100 tokens', async function () {
       this.crowdsale.should.exist;
-      await this.crowdsale.unpause();
+      this.crowdsale.setCurrentTime(new Date('2018-03-28').getTime());
+      try {
+          await this.crowdsale.buyTokens(investor, { value: ether(0.01) });
+          assert.fail('Expected reject not received');
+      } catch (error) {
+        assert(error.message.search('revert') > 0, 'Wrong error message received: ' + error.message);
+      }
+    });
+    it('should reveive correct amount (1340) of tokens when sending 1 ether for the 1\'st phase', async function () {
+      this.crowdsale.should.exist;
+      this.crowdsale.setCurrentTime(new Date('2018-03-28').getTime());
       await this.crowdsale.buyTokens(investor, { value: ether(1) });
       const balance = await this.token.balanceOf(investor);
-      balance.should.be.bignumber.equal(11500e18);
+      balance.should.be.bignumber.equal(1340e18);
     });
-
-    it('should reveive correct amount (11000) of tokens when sending 1 ether for the 2\'nd wave', async function () {
+    it('should reveive correct amount (1290) of tokens when sending 1 ether for the 2\'nd phase', async function () {
       this.crowdsale.should.exist;
-      await this.crowdsale.unpause();
-      await this.crowdsale.buyTokens(wallet, { value: ether(5000) });
-
+      this.crowdsale.setCurrentTime(new Date('2018-03-28').getTime());
+      await this.crowdsale.buyTokens(wallet, { value: ether(10000) });
       await this.crowdsale.buyTokens(investor, { value: ether(1) });
       const balance = await this.token.balanceOf(investor);
-      balance.should.be.bignumber.equal(11000e18);
+      balance.should.be.bignumber.equal(1290e18);
     });
-
+});/*
     it('should reveive correct amount (10500) of tokens when sending 1 ether for the 3\'rd wave', async function () {
       this.crowdsale.should.exist;
       await this.crowdsale.unpause();
@@ -220,7 +225,7 @@ contract('HardcapCrowdsaleTest', function (accounts) {
         assert(error.message.search('revert') > 0, 'Wrong error message received: ' + error.message);
       }
     });
-  });
+  });*/
 });
 
 function ether (n) {

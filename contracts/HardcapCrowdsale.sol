@@ -8,8 +8,6 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
   using SafeMath for uint256;
 
   struct Phase {
-    uint from;
-    uint to;
     uint256 cap;
     uint256 rate;
   }
@@ -18,8 +16,12 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
   uint256 private constant PLATFORM_PERCENTAGE = 25;
   uint256 private constant CROWDSALE_PERCENTAGE = 65;
 
+  uint256 private constant MIN_TOKENS_TO_PURCHASE = 100 * 10**18;
+
   uint256 private leftovers = 65 * 10**24;
-  uint256 private currentCap;
+
+  uint256 public currentCap = 10 * 10**24;
+  uint256 public phaseEndDate = 1522936800000;
 
   address public overflowOwner;
   uint256 public overflowAmount;
@@ -35,19 +37,31 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
     _;
   }
 
+  modifier onlyWhileOpen {
+    require(getBlockTimestamp() >= openingTime && getBlockTimestamp() <= closingTime);
+    _;
+  }
+
   function HardcapCrowdsale(address _wallet, address _platform, HardcapToken _token) public
     Crowdsale(1340, _wallet, _token)
-    TimedCrowdsale(1522072800, 1528984800) {
+    TimedCrowdsale(1522072800000, 1528984800000) {
       platform = _platform;
-      currentCap = 10 * 10**24;
-      phases[1] = Phase(1522072800, 1522936800, 10 * 10**24, 1340);
+      phases[1] = Phase(10 * 10**24, 1340);
+      phases[2] = Phase(7 * 10**24, 1290);
+      phases[3] = Phase(7 * 10**24, 1240);
+      phases[4] = Phase(7 * 10**24, 1190);
+      phases[5] = Phase(7 * 10**24, 1140);
+      phases[6] = Phase(9 * 10**24, 1090);
+      phases[7] = Phase(9 * 10**24, 1050);
+      phases[8] = Phase(9 * 10**24, 1000);
+      /*phases[1] = Phase(1522072800, 1522936800, 10 * 10**24, 1340);
       phases[2] = Phase(1522936800, 1523800800, 7 * 10**24, 1290);
       phases[3] = Phase(1523800800, 1524664800, 7 * 10**24, 1240);
       phases[4] = Phase(1524664800, 1525528800, 7 * 10**24, 1190);
       phases[5] = Phase(1525528800, 1526392800, 7 * 10**24, 1140);
       phases[6] = Phase(1526392800, 1527256800, 9 * 10**24, 1090);
       phases[7] = Phase(1527256800, 1528120800, 9 * 10**24, 1050);
-      phases[8] = Phase(1528120800, 1528984800, 9 * 10**24, 1000);
+      phases[8] = Phase(1528120800, 1528984800, 9 * 10**24, 1000);*/
   }
 
   /*
@@ -65,7 +79,7 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
   function _preValidatePurchase(address _beneficiary, uint256 _weiAmount) notFinished internal {
     super._preValidatePurchase(_beneficiary, _weiAmount);
 
-    if (phases[phase].to < getBlockTimestamp()) {
+    if (phaseEndDate < getBlockTimestamp()) {
       _changePhase();
     }
   }
@@ -75,6 +89,7 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
     if (currentCap > _tokens && leftovers > _tokens) {
       currentCap = currentCap.sub(_tokens);
       leftovers = leftovers.sub(_tokens);
+      require(_tokens >= MIN_TOKENS_TO_PURCHASE);
       return _tokens;
     }
 
@@ -109,6 +124,7 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
       _assignOverlfowData(_weiAmount);
     }
 
+    require(_tokensToSend >= MIN_TOKENS_TO_PURCHASE);
     return _tokensToSend;
   }
 
@@ -126,6 +142,8 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
   function _changePhase() {
     require(phase < 8);
     phase = phase.add(1);
+    phaseEndDate = getBlockTimestamp() + 10 days;
+    closingTime = phaseEndDate + (8 - phase) * 10 days;
     currentCap = currentCap.add(phases[phase].cap);
     rate = phases[phase].rate;
   }
