@@ -8,7 +8,7 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
   using SafeMath for uint256;
 
   struct Phase {
-    uint256 cap;
+    uint256 capTo;
     uint256 rate;
   }
 
@@ -18,24 +18,16 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
 
   uint256 private constant MIN_TOKENS_TO_PURCHASE = 100 * 10**18;
 
-  uint256 private leftovers = 65 * 10**24;
+  uint256 private constant ICO_TOKENS_CAP = 65 * 10**24;
 
-  uint256 public currentCap = 10 * 10**24;
   uint256 public phaseEndDate = 1522936800000;
 
   address public overflowOwner;
   uint256 public overflowAmount;
 
   address public platform;
-  uint256 public phase = 1;
 
-  mapping (uint => Phase) private phases;
-
-  modifier notFinished() {
-    require(leftovers > 0);
-    require(!isFinalized);
-    _;
-  }
+  mapping (uint8 => Phase) private phases;
 
   modifier onlyWhileOpen {
     require(getBlockTimestamp() >= openingTime && getBlockTimestamp() <= closingTime);
@@ -46,14 +38,22 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
     Crowdsale(1340, _wallet, _token)
     TimedCrowdsale(1522072800000, 1528984800000) {
       platform = _platform;
+      // 0 - 10
       phases[1] = Phase(10 * 10**24, 1340);
-      phases[2] = Phase(7 * 10**24, 1290);
-      phases[3] = Phase(7 * 10**24, 1240);
-      phases[4] = Phase(7 * 10**24, 1190);
-      phases[5] = Phase(7 * 10**24, 1140);
-      phases[6] = Phase(9 * 10**24, 1090);
-      phases[7] = Phase(9 * 10**24, 1050);
-      phases[8] = Phase(9 * 10**24, 1000);
+      // 10 - 17
+      phases[2] = Phase(17 * 10**24, 1290);
+      // 17 - 24
+      phases[3] = Phase(24 * 10**24, 1240);
+      // 24 - 31
+      phases[4] = Phase(31 * 10**24, 1190);
+      // 31 - 38
+      phases[5] = Phase(38 * 10**24, 1140);
+      // 38 - 47
+      phases[6] = Phase(47 * 10**24, 1090);
+      // 47 - 56
+      phases[7] = Phase(56 * 10**24, 1050);
+      // 56 - 65
+      phases[8] = Phase(65 * 10**24, 1000);
       /*phases[1] = Phase(1522072800, 1522936800, 10 * 10**24, 1340);
       phases[2] = Phase(1522936800, 1523800800, 7 * 10**24, 1290);
       phases[3] = Phase(1523800800, 1524664800, 7 * 10**24, 1240);
@@ -76,56 +76,89 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
     _postValidatePurchase(_beneficiary, weiAmount);
   }
 
-  function _preValidatePurchase(address _beneficiary, uint256 _weiAmount) notFinished internal {
-    super._preValidatePurchase(_beneficiary, _weiAmount);
+  function _getCurrentPhase(uint256 _currentSupply) internal view returns (Phase) {
+      uint8 phase = 1;
+      while (_currentSupply <= phases[phase].capTo && phase < 8) {
+        phase = phase + 1;
+      }
+      return phases[phase];
+   }
 
-    if (phaseEndDate < getBlockTimestamp()) {
-      _changePhase();
+  function _preValidatePurchase(address _beneficiary, uint256 _weiAmount) internal {
+    super._preValidatePurchase(_beneficiary, _weiAmount);
+    require(token.totalSupply() < ICO_TOKENS_CAP);
+    require(!isFinalized);
+
+    while (phaseEndDate < getBlockTimestamp() && phaseEndDate < closingTime) {
+      phaseEndDate = getBlockTimestamp() + 10 days;
+      //closingTime = phaseEndDate + (8 - phase) * 10 days;
     }
   }
 
   function _getTokenAmount(uint256 _weiAmount) internal view returns (uint256) {
-    uint256 _tokens = _weiAmount.mul(rate);
-    if (currentCap > _tokens && leftovers > _tokens) {
-      currentCap = currentCap.sub(_tokens);
-      leftovers = leftovers.sub(_tokens);
-      require(_tokens >= MIN_TOKENS_TO_PURCHASE);
-      return _tokens;
-    }
-
+    uint256 _leftowers = 0;
     uint256 _weiReq = 0;
-    uint256 _tokensToSend = 0;
+    uint256 _tokens = 0;
+    uint256 _currentSupply = token.totalSupply();
+    Phase memory _phase = _getCurrentPhase(_currentSupply);
 
-    while (leftovers > 0 && _weiAmount > 0) {
-      uint256 _stepTokens = 0;
-
-      if (currentCap < _tokens) {
-          _stepTokens = currentCap;
-          currentCap = 0;
-          _weiReq = _stepTokens.div(rate);
-          _weiAmount = _weiAmount.sub(_weiReq);
-          _changePhase();
+    while (_weiAmount > 0 && _currentSupply < ICO_TOKENS_CAP) {
+      _leftowers = _phase.capTo.sub(_currentSupply);
+      _weiReq = _leftowers.div(_phase.rate);
+      if (_weiReq < _weiAmount) {
+         _tokens = _tokens.add(_leftowers);
+         _weiAmount = _weiAmount.sub(_weiReq);
       } else {
-          _stepTokens = leftovers;
-          if (leftovers > _tokens) {
-            _stepTokens = _tokens;
-          }
-          currentCap = currentCap.sub(_stepTokens);
-          _weiReq = _stepTokens.div(rate);
-          _weiAmount = _weiAmount.sub(_weiReq);
+         _tokens = _tokens.add(_weiAmount.mul(_phase.rate));
+         _weiAmount = 0;
       }
-      _tokensToSend = _tokensToSend.add(_stepTokens);
-      leftovers = leftovers.sub(_stepTokens);
 
-      _tokens = _weiAmount.mul(rate);
+      _currentSupply = token.totalSupply().add(_tokens);
+      _phase = _getCurrentPhase(_currentSupply);
     }
 
-    if (_weiAmount > 0) {
-      _assignOverlfowData(_weiAmount);
+    require(_tokens >= MIN_TOKENS_TO_PURCHASE);
+    return _tokens;
+  }
+
+  /*
+    If the last tokens where sold and buyer send more ethers than required
+    we save the overflow data. Than it is up to ico raiser to return the oveflowed
+    invested amount to the buyer.
+  */
+  function _processPurchase(address _beneficiary, uint256 _tokenAmount) internal {
+    uint256 _currentSupply = token.totalSupply();
+    Phase memory _phase = _getCurrentPhase(_currentSupply);
+    uint256 _tokens = _tokenAmount;
+    uint256 _weiAmount = 0;
+    uint256 _leftowers = 0;
+    bool _phaseChanged = false;
+
+    while (_tokens > 0) {
+      _leftowers = _phase.capTo.sub(_currentSupply);
+      if (_leftowers <= _tokens) {
+        _weiAmount = _weiAmount.add(_tokens.div(_phase.rate));
+        _tokens = 0;
+      } else {
+        _weiAmount = _weiAmount.add(_leftowers.div(_phase.rate));
+        _tokens = _tokens.sub(_leftowers);
+        _phaseChanged = true;
+      }
+
+      _currentSupply = token.totalSupply().sub(_tokens);
+      _phase = _getCurrentPhase(_currentSupply);
     }
 
-    require(_tokensToSend >= MIN_TOKENS_TO_PURCHASE);
-    return _tokensToSend;
+    if (_phaseChanged) {
+      phaseEndDate = getBlockTimestamp() + 10 days;
+    }
+
+    if (msg.value > _weiAmount) {
+      overflowOwner = msg.sender;
+      overflowAmount = msg.value.sub(_weiAmount);
+    }
+
+    super._processPurchase(_beneficiary, _tokenAmount);
   }
 
   /*
@@ -134,29 +167,10 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
   */
   function _postValidatePurchase(address _beneficiary, uint256 _weiAmount) internal {
     super._postValidatePurchase(_beneficiary, _weiAmount);
+    require(token.totalSupply() < ICO_TOKENS_CAP);
     if (overflowAmount > 0) {
       weiRaised = weiRaised.sub(overflowAmount);
     }
-  }
-
-  function _changePhase() {
-    require(phase < 8);
-    phase = phase.add(1);
-    phaseEndDate = getBlockTimestamp() + 10 days;
-    closingTime = phaseEndDate + (8 - phase) * 10 days;
-    currentCap = currentCap.add(phases[phase].cap);
-    rate = phases[phase].rate;
-  }
-
-  /*
-    If the last tokens where sold and buyer send more ethers than required
-    we save the overflow data. Than it is up to ico raiser to return the oveflowed
-    invested amount to the buyer.
-  */
-  function _assignOverlfowData(uint256 _weiAmount) internal {
-      require(leftovers <= 0);
-      overflowOwner = msg.sender;
-      overflowAmount = _weiAmount;
   }
 
   function finalization() internal {
