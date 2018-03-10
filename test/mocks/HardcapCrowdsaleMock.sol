@@ -10,11 +10,11 @@ contract HardcapCrowdsaleMock is HardcapCrowdsale {
     HardcapCrowdsale(_wallet, _platform, _token) {
   }
 
-  function setCurrentTime(uint256 _currentTime) {
+  function setCurrentTime(uint256 _currentTime) public {
     currentTime = _currentTime;
   }
 
-  function getBlockTimestamp() internal constant returns (uint256) {
+  function getBlockTimestamp() internal view returns (uint256) {
     return currentTime;
   }
 }

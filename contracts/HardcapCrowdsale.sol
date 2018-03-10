@@ -1,10 +1,9 @@
 pragma solidity ^0.4.18;
 
-import "zeppelin-solidity/contracts/crowdsale/emission/MintedCrowdsale.sol";
-import "zeppelin-solidity/contracts/crowdsale/distribution/FinalizableCrowdsale.sol";
+import "zeppelin-solidity/contracts/ownership/Ownable.sol";
 import './HardcapToken.sol';
 
-contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
+contract HardcapCrowdsale is Ownable {
   using SafeMath for uint256;
 
   struct Phase {
@@ -20,86 +19,95 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
 
   uint256 private constant ICO_TOKENS_CAP = 65 * 10**24;
 
-  uint256 public phaseEndDate = 1522936800000;
+  uint256 private constant FINAL_CLOSING_TIME = 1528984800000;
 
-  address public overflowOwner;
-  uint256 public overflowAmount;
+  ERC20 public token;
 
+  address public wallet;
   address public platform;
+
+  uint256 public weiRaised;
+
+  bool public isFinalized = false;
+
+  uint256 public openingTime = 1522072800000;
+  uint256 public closingTime = 1522936800000;
 
   mapping (uint8 => Phase) private phases;
 
-  modifier onlyWhileOpen {
-    require(getBlockTimestamp() >= openingTime && getBlockTimestamp() <= closingTime);
-    _;
+  event TokenPurchase(address indexed purchaser, address indexed beneficiary, uint256 value, uint256 amount);
+
+  event Finalized();
+
+  function HardcapCrowdsale(address _wallet, address _platform, HardcapToken _token) public {
+      require(_wallet != address(0));
+      require(_platform != address(0));
+      require(_token != address(0));
+
+      wallet = _wallet;
+      platform = _platform;
+      token = _token;
+
+      phases[1] = Phase(10 * 10**24, 1340);
+      phases[2] = Phase(17 * 10**24, 1290);
+      phases[3] = Phase(24 * 10**24, 1240);
+      phases[4] = Phase(31 * 10**24, 1190);
+      phases[5] = Phase(38 * 10**24, 1140);
+      phases[6] = Phase(47 * 10**24, 1090);
+      phases[7] = Phase(56 * 10**24, 1050);
+      phases[8] = Phase(65 * 10**24, 1000);
   }
 
-  function HardcapCrowdsale(address _wallet, address _platform, HardcapToken _token) public
-    Crowdsale(1340, _wallet, _token)
-    TimedCrowdsale(1522072800000, 1528984800000) {
-      platform = _platform;
-      // 0 - 10
-      phases[1] = Phase(10 * 10**24, 1340);
-      // 10 - 17
-      phases[2] = Phase(17 * 10**24, 1290);
-      // 17 - 24
-      phases[3] = Phase(24 * 10**24, 1240);
-      // 24 - 31
-      phases[4] = Phase(31 * 10**24, 1190);
-      // 31 - 38
-      phases[5] = Phase(38 * 10**24, 1140);
-      // 38 - 47
-      phases[6] = Phase(47 * 10**24, 1090);
-      // 47 - 56
-      phases[7] = Phase(56 * 10**24, 1050);
-      // 56 - 65
-      phases[8] = Phase(65 * 10**24, 1000);
-      /*phases[1] = Phase(1522072800, 1522936800, 10 * 10**24, 1340);
-      phases[2] = Phase(1522936800, 1523800800, 7 * 10**24, 1290);
-      phases[3] = Phase(1523800800, 1524664800, 7 * 10**24, 1240);
-      phases[4] = Phase(1524664800, 1525528800, 7 * 10**24, 1190);
-      phases[5] = Phase(1525528800, 1526392800, 7 * 10**24, 1140);
-      phases[6] = Phase(1526392800, 1527256800, 9 * 10**24, 1090);
-      phases[7] = Phase(1527256800, 1528120800, 9 * 10**24, 1050);
-      phases[8] = Phase(1528120800, 1528984800, 9 * 10**24, 1000);*/
+  function () external payable {
+    buyTokens(msg.sender);
+  }
+
+  function buyTokens(address _beneficiary) public payable {
+    _processTokensPurchase(_beneficiary, msg.value);
   }
 
   /*
     If investmend was made in bitcoins etc. owner can assign apropriate amount of
     tokens to the investor.
   */
-  function assignTokens(address _beneficiary, uint256 weiAmount) onlyOwner public {
-    _preValidatePurchase(_beneficiary, weiAmount);
-    uint256 tokens = _getTokenAmount(weiAmount);
-    _processPurchase(_beneficiary, tokens);
-    _updatePurchasingState(_beneficiary, weiAmount);
-    _postValidatePurchase(_beneficiary, weiAmount);
+  function assignTokens(address _beneficiary, uint256 _weiAmount) onlyOwner public {
+    _processTokensPurchase(_beneficiary, _weiAmount);
   }
 
-  function _getCurrentPhase(uint256 _currentSupply) internal view returns (Phase) {
-      uint8 phase = 1;
-      while (_currentSupply <= phases[phase].capTo && phase < 8) {
-        phase = phase + 1;
-      }
-      return phases[phase];
-   }
-
-  function _preValidatePurchase(address _beneficiary, uint256 _weiAmount) internal {
-    super._preValidatePurchase(_beneficiary, _weiAmount);
-    require(token.totalSupply() < ICO_TOKENS_CAP);
+  function finalize() onlyOwner public {
     require(!isFinalized);
+    require(_hasClosed());
 
-    while (phaseEndDate < getBlockTimestamp() && phaseEndDate < closingTime) {
-      phaseEndDate = getBlockTimestamp() + 10 days;
-      //closingTime = phaseEndDate + (8 - phase) * 10 days;
-    }
+    HardcapToken _token = HardcapToken(token);
+
+    // mint and burn all leftovers
+    uint256 _tokenCap = _token.totalSupply().mul(100).div(CROWDSALE_PERCENTAGE);
+
+    require(_token.mint(wallet, _tokenCap.mul(TEAM_PERCENTAGE).div(100)));
+    require(_token.mint(platform, _tokenCap.mul(PLATFORM_PERCENTAGE).div(100)));
+    _token.burn(_token.cap().sub(_token.totalSupply()));
+
+    require(_token.finishMinting());
+    _token.transferOwnership(wallet);
+
+    Finalized();
+
+    isFinalized = true;
   }
 
-  function _getTokenAmount(uint256 _weiAmount) internal view returns (uint256) {
+  function _hasClosed() internal view returns (bool) {
+    return _getBlockTimestamp() > FINAL_CLOSING_TIME || token.totalSupply() >= ICO_TOKENS_CAP;
+  }
+
+  function _processTokensPurchase(address _beneficiary, uint256 _weiAmount) internal {
+    _preValidatePurchase(_beneficiary, _weiAmount);
+
+    // calculate token amount to be created
     uint256 _leftowers = 0;
     uint256 _weiReq = 0;
     uint256 _tokens = 0;
     uint256 _currentSupply = token.totalSupply();
+    bool _phaseChanged = false;
     Phase memory _phase = _getCurrentPhase(_currentSupply);
 
     while (_weiAmount > 0 && _currentSupply < ICO_TOKENS_CAP) {
@@ -108,6 +116,7 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
       if (_weiReq < _weiAmount) {
          _tokens = _tokens.add(_leftowers);
          _weiAmount = _weiAmount.sub(_weiReq);
+         _phaseChanged = true;
       } else {
          _tokens = _tokens.add(_weiAmount.mul(_phase.rate));
          _weiAmount = 0;
@@ -118,76 +127,58 @@ contract HardcapCrowdsale is MintedCrowdsale, FinalizableCrowdsale {
     }
 
     require(_tokens >= MIN_TOKENS_TO_PURCHASE);
-    return _tokens;
-  }
-
-  /*
-    If the last tokens where sold and buyer send more ethers than required
-    we save the overflow data. Than it is up to ico raiser to return the oveflowed
-    invested amount to the buyer.
-  */
-  function _processPurchase(address _beneficiary, uint256 _tokenAmount) internal {
-    uint256 _currentSupply = token.totalSupply();
-    Phase memory _phase = _getCurrentPhase(_currentSupply);
-    uint256 _tokens = _tokenAmount;
-    uint256 _weiAmount = 0;
-    uint256 _leftowers = 0;
-    bool _phaseChanged = false;
-
-    while (_tokens > 0) {
-      _leftowers = _phase.capTo.sub(_currentSupply);
-      if (_leftowers <= _tokens) {
-        _weiAmount = _weiAmount.add(_tokens.div(_phase.rate));
-        _tokens = 0;
-      } else {
-        _weiAmount = _weiAmount.add(_leftowers.div(_phase.rate));
-        _tokens = _tokens.sub(_leftowers);
-        _phaseChanged = true;
-      }
-
-      _currentSupply = token.totalSupply().sub(_tokens);
-      _phase = _getCurrentPhase(_currentSupply);
-    }
 
     if (_phaseChanged) {
-      phaseEndDate = getBlockTimestamp() + 10 days;
+      _changeClosingTime();
     }
 
     if (msg.value > _weiAmount) {
-      overflowOwner = msg.sender;
-      overflowAmount = msg.value.sub(_weiAmount);
+      uint256 _overflowAmount = msg.value.sub(_weiAmount);
+      _beneficiary.transfer(_overflowAmount);
     }
 
-    super._processPurchase(_beneficiary, _tokenAmount);
+    weiRaised = weiRaised.add(_weiAmount);
+
+    require(HardcapToken(token).mint(_beneficiary, _tokens));
+    TokenPurchase(msg.sender, _beneficiary, _weiAmount, _tokens);
+
+    // You can access this method either buying tokens or assigning tokens to
+    // someone. In the previous case you won't be sending any ehter to contract
+    // so no need to forward any funds to wallet.
+    if (msg.value > 0) {
+      wallet.transfer(_weiAmount);
+    }
   }
 
-  /*
-    If overflow happened we dicrease the weiRaised because, those will be returned
-    to investor and it is not weiRaised.
-  */
-  function _postValidatePurchase(address _beneficiary, uint256 _weiAmount) internal {
-    super._postValidatePurchase(_beneficiary, _weiAmount);
+  function _preValidatePurchase(address _beneficiary, uint256 _weiAmount) internal {
+    while (closingTime < _getBlockTimestamp() && closingTime < FINAL_CLOSING_TIME) {
+      _changeClosingTime();
+    }
+    require(_getBlockTimestamp() >= openingTime && _getBlockTimestamp() <= closingTime);
+    require(_beneficiary != address(0));
+    require(_weiAmount != 0);
+
     require(token.totalSupply() < ICO_TOKENS_CAP);
-    if (overflowAmount > 0) {
-      weiRaised = weiRaised.sub(overflowAmount);
+    require(!isFinalized);
+  }
+
+  function _changeClosingTime() internal {
+    closingTime = _getBlockTimestamp() + 10 days;
+    if (closingTime > FINAL_CLOSING_TIME) {
+      closingTime = FINAL_CLOSING_TIME;
     }
   }
 
-  function finalization() internal {
-    HardcapToken token = HardcapToken(token);
+  function _getCurrentPhase(uint256 _currentSupply) internal view returns (Phase) {
+      uint8 phase = 1;
+      while (_currentSupply <= phases[phase].capTo && phase < 8) {
+        phase = phase + 1;
+      }
+      return phases[phase];
+   }
 
-    // mint and burn all leftovers
-    uint256 tokenCap = token.totalSupply().mul(100).div(CROWDSALE_PERCENTAGE);
+   function _getBlockTimestamp() internal view returns (uint256) {
+     return block.timestamp;
+   }
 
-    require(token.mint(wallet, tokenCap.mul(TEAM_PERCENTAGE).div(100)));
-    require(token.mint(platform, tokenCap.mul(PLATFORM_PERCENTAGE).div(100)));
-    token.burn(token.cap().sub(token.totalSupply()));
-
-    require(token.finishMinting());
-    token.transferOwnership(wallet);
-  }
-
-  function getBlockTimestamp() internal constant returns (uint256) {
-    return block.timestamp;
-  }
 }
