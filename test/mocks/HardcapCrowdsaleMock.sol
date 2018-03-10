@@ -14,7 +14,7 @@ contract HardcapCrowdsaleMock is HardcapCrowdsale {
     currentTime = _currentTime;
   }
 
-  function getBlockTimestamp() internal view returns (uint256) {
+  function _getTime() public view returns (uint256) {
     return currentTime;
   }
 }

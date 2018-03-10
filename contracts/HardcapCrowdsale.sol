@@ -21,6 +21,8 @@ contract HardcapCrowdsale is Ownable {
 
   uint256 private constant FINAL_CLOSING_TIME = 1528984800000;
 
+  uint8 private phase = 1;
+
   ERC20 public token;
 
   address public wallet;
@@ -96,7 +98,7 @@ contract HardcapCrowdsale is Ownable {
   }
 
   function _hasClosed() internal view returns (bool) {
-    return _getBlockTimestamp() > FINAL_CLOSING_TIME || token.totalSupply() >= ICO_TOKENS_CAP;
+    return _getTime() > FINAL_CLOSING_TIME || token.totalSupply() >= ICO_TOKENS_CAP;
   }
 
   function _processTokensPurchase(address _beneficiary, uint256 _weiAmount) internal {
@@ -108,7 +110,7 @@ contract HardcapCrowdsale is Ownable {
     uint256 _tokens = 0;
     uint256 _currentSupply = token.totalSupply();
     bool _phaseChanged = false;
-    Phase memory _phase = _getCurrentPhase(_currentSupply);
+    Phase memory _phase = phases[phase];
 
     while (_weiAmount > 0 && _currentSupply < ICO_TOKENS_CAP) {
       _leftowers = _phase.capTo.sub(_currentSupply);
@@ -116,6 +118,7 @@ contract HardcapCrowdsale is Ownable {
       if (_weiReq < _weiAmount) {
          _tokens = _tokens.add(_leftowers);
          _weiAmount = _weiAmount.sub(_weiReq);
+         phase = phase + 1;
          _phaseChanged = true;
       } else {
          _tokens = _tokens.add(_weiAmount.mul(_phase.rate));
@@ -123,7 +126,7 @@ contract HardcapCrowdsale is Ownable {
       }
 
       _currentSupply = token.totalSupply().add(_tokens);
-      _phase = _getCurrentPhase(_currentSupply);
+      _phase = phases[phase];
     }
 
     require(_tokens >= MIN_TOKENS_TO_PURCHASE);
@@ -151,10 +154,11 @@ contract HardcapCrowdsale is Ownable {
   }
 
   function _preValidatePurchase(address _beneficiary, uint256 _weiAmount) internal {
-    while (closingTime < _getBlockTimestamp() && closingTime < FINAL_CLOSING_TIME) {
+    while (closingTime < _getTime() && closingTime < FINAL_CLOSING_TIME && phase < 8) {
       _changeClosingTime();
+      phase = phase + 1;
     }
-    require(_getBlockTimestamp() >= openingTime && _getBlockTimestamp() <= closingTime);
+    require(_getTime() >= openingTime && _getTime() <= closingTime);
     require(_beneficiary != address(0));
     require(_weiAmount != 0);
 
@@ -163,22 +167,14 @@ contract HardcapCrowdsale is Ownable {
   }
 
   function _changeClosingTime() internal {
-    closingTime = _getBlockTimestamp() + 10 days;
+    closingTime = _getTime() + 10 days;
     if (closingTime > FINAL_CLOSING_TIME) {
       closingTime = FINAL_CLOSING_TIME;
     }
   }
 
-  function _getCurrentPhase(uint256 _currentSupply) internal view returns (Phase) {
-      uint8 phase = 1;
-      while (_currentSupply <= phases[phase].capTo && phase < 8) {
-        phase = phase + 1;
-      }
-      return phases[phase];
-   }
-
-   function _getBlockTimestamp() internal view returns (uint256) {
-     return block.timestamp;
-   }
+ function _getTime() public view returns (uint256) {
+   return now;
+ }
 
 }
