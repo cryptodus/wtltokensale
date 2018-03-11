@@ -23,7 +23,7 @@ contract HardcapCrowdsale is Ownable {
 
   uint256 public phase = 1;
 
-  ERC20 public token;
+  HardcapToken public token;
 
   address public wallet;
   address public platform;
@@ -52,6 +52,7 @@ contract HardcapCrowdsale is Ownable {
       platform = _platform;
       token = _token;
 
+      // phases capTo means that totalSupply must reach it to change the phase
       phases[1] = Phase(10 * 10**24, 1340);
       phases[2] = Phase(17 * 10**24, 1290);
       phases[3] = Phase(24 * 10**24, 1240);
@@ -62,7 +63,10 @@ contract HardcapCrowdsale is Ownable {
       phases[8] = Phase(65 * 10**24, 1000);
   }
 
-  function setTeamTokenHolder(address _teamTokenHolder) public {
+  /*
+    contract for teams tokens lockup
+  */
+  function setTeamTokenHolder(address _teamTokenHolder) onlyOwner public {
     require(_teamTokenHolder != address(0));
     teamTokenHolder = _teamTokenHolder;
   }
@@ -91,12 +95,15 @@ contract HardcapCrowdsale is Ownable {
 
     HardcapToken _token = HardcapToken(token);
 
-    // mint and burn all leftovers
+    // assign each counterparty their share
     uint256 _tokenCap = _token.totalSupply().mul(100).div(CROWDSALE_PERCENTAGE);
-
     require(_token.mint(teamTokenHolder, _tokenCap.mul(TEAM_PERCENTAGE).div(100)));
     require(_token.mint(platform, _tokenCap.mul(PLATFORM_PERCENTAGE).div(100)));
-    _token.burn(_token.cap().sub(_token.totalSupply()));
+
+    // mint and burn all leftovers
+    uint256 _tokensToBurn = _token.cap().sub(_token.totalSupply());
+    require(_token.mint(address(this), _tokensToBurn));
+    _token.burn(_tokensToBurn);
 
     require(_token.finishMinting());
     _token.transferOwnership(wallet);
@@ -117,6 +124,7 @@ contract HardcapCrowdsale is Ownable {
     // calculate token amount to be created
     uint256 _leftowers = 0;
     uint256 _weiReq = 0;
+    uint256 _weiSpent = 0;
     uint256 _tokens = 0;
     uint256 _currentSupply = token.totalSupply();
     bool _phaseChanged = false;
@@ -125,13 +133,16 @@ contract HardcapCrowdsale is Ownable {
     while (_weiAmount > 0 && _currentSupply < ICO_TOKENS_CAP) {
       _leftowers = _phase.capTo.sub(_currentSupply);
       _weiReq = _leftowers.div(_phase.rate);
+      // check if it is possible to purchase more than there is available in this phase
       if (_weiReq < _weiAmount) {
          _tokens = _tokens.add(_leftowers);
          _weiAmount = _weiAmount.sub(_weiReq);
+         _weiSpent = _weiSpent.add(_weiReq);
          phase = phase + 1;
          _phaseChanged = true;
       } else {
          _tokens = _tokens.add(_weiAmount.mul(_phase.rate));
+         _weiSpent = _weiSpent.add(_weiAmount);
          _weiAmount = 0;
       }
 
@@ -141,29 +152,32 @@ contract HardcapCrowdsale is Ownable {
 
     require(_tokens >= MIN_TOKENS_TO_PURCHASE);
 
+    // if phase changes forward the date of the next phase change by 10 days
     if (_phaseChanged) {
       _changeClosingTime();
     }
 
-    if (msg.value > _weiAmount) {
-      uint256 _overflowAmount = msg.value.sub(_weiAmount);
+    // return leftovers to investor if tokens are over but he sent more ehters.
+    if (msg.value > _weiSpent) {
+      uint256 _overflowAmount = msg.value.sub(_weiSpent);
       _beneficiary.transfer(_overflowAmount);
     }
 
-    weiRaised = weiRaised.add(_weiAmount);
+    weiRaised = weiRaised.add(_weiSpent);
 
     require(HardcapToken(token).mint(_beneficiary, _tokens));
-    TokenPurchase(msg.sender, _beneficiary, _weiAmount, _tokens);
+    TokenPurchase(msg.sender, _beneficiary, _weiSpent, _tokens);
 
     // You can access this method either buying tokens or assigning tokens to
     // someone. In the previous case you won't be sending any ehter to contract
     // so no need to forward any funds to wallet.
     if (msg.value > 0) {
-      wallet.transfer(_weiAmount);
+      wallet.transfer(_weiSpent);
     }
   }
 
   function _preValidatePurchase(address _beneficiary, uint256 _weiAmount) internal {
+    // if the phase time ended calculate next phase end time and set new phase
     if (closingTime < _getTime() && closingTime < FINAL_CLOSING_TIME && phase < 8) {
       phase = phase.add(_calcPhasesPassed());
       _changeClosingTime();
@@ -179,7 +193,7 @@ contract HardcapCrowdsale is Ownable {
   }
 
   function _changeClosingTime() internal {
-    closingTime = _getTime() + 10 days;
+    closingTime = _getTime() + 10 days * 1000;
     if (closingTime > FINAL_CLOSING_TIME) {
       closingTime = FINAL_CLOSING_TIME;
     }
@@ -189,7 +203,7 @@ contract HardcapCrowdsale is Ownable {
     return  _getTime().sub(closingTime).div(10 days * 1000).add(1);
   }
 
- function _getTime() public view returns (uint256) {
+ function _getTime() internal view returns (uint256) {
    return now;
  }
 

@@ -1,6 +1,9 @@
 pragma solidity ^0.4.18;
 
+import "zeppelin-solidity/contracts/ownership/Ownable.sol";
+import "zeppelin-solidity/contracts/math/SafeMath.sol";
 import "./HardcapCrowdsale.sol";
+import "./HardcapToken.sol";
 
 contract TeamTokenHolder is Ownable {
   using SafeMath for uint256;
@@ -8,13 +11,13 @@ contract TeamTokenHolder is Ownable {
   uint256 private LOCKUP_TIME = 24; // in months
 
   HardcapCrowdsale crowdsale;
-  ERC20 token;
+  HardcapToken token;
   uint256 public collectedTokens;
 
   function TeamTokenHolder(address _owner, address _crowdsale, address _token) public {
     owner = _owner;
     crowdsale = HardcapCrowdsale(_crowdsale);
-    token = ERC20(_token);
+    token = HardcapToken(_token);
   }
 
   /*
@@ -67,9 +70,9 @@ contract TeamTokenHolder is Ownable {
       return;
     }
 
-    ERC20 _erc20Token = ERC20(_token);
-    uint256 balance = _erc20Token.balanceOf(this);
-    _erc20Token.transfer(owner, balance);
+    HardcapToken _hardcapToken = HardcapToken(_token);
+    uint256 balance = _hardcapToken.balanceOf(this);
+    _hardcapToken.transfer(owner, balance);
     ClaimedTokens(_token, owner, balance);
   }
 
