@@ -21,12 +21,13 @@ contract HardcapCrowdsale is Ownable {
 
   uint256 private constant FINAL_CLOSING_TIME = 1528984800000;
 
-  uint8 private phase = 1;
+  uint256 public phase = 1;
 
   ERC20 public token;
 
   address public wallet;
   address public platform;
+  address public teamTokenHolder;
 
   uint256 public weiRaised;
 
@@ -34,8 +35,9 @@ contract HardcapCrowdsale is Ownable {
 
   uint256 public openingTime = 1522072800000;
   uint256 public closingTime = 1522936800000;
+  uint256 public finalizedTime;
 
-  mapping (uint8 => Phase) private phases;
+  mapping (uint256 => Phase) private phases;
 
   event TokenPurchase(address indexed purchaser, address indexed beneficiary, uint256 value, uint256 amount);
 
@@ -60,6 +62,11 @@ contract HardcapCrowdsale is Ownable {
       phases[8] = Phase(65 * 10**24, 1000);
   }
 
+  function setTeamTokenHolder(address _teamTokenHolder) public {
+    require(_teamTokenHolder != address(0));
+    teamTokenHolder = _teamTokenHolder;
+  }
+
   function () external payable {
     buyTokens(msg.sender);
   }
@@ -77,15 +84,17 @@ contract HardcapCrowdsale is Ownable {
   }
 
   function finalize() onlyOwner public {
+    require(teamTokenHolder != address(0));
     require(!isFinalized);
     require(_hasClosed());
+    require(finalizedTime == 0);
 
     HardcapToken _token = HardcapToken(token);
 
     // mint and burn all leftovers
     uint256 _tokenCap = _token.totalSupply().mul(100).div(CROWDSALE_PERCENTAGE);
 
-    require(_token.mint(wallet, _tokenCap.mul(TEAM_PERCENTAGE).div(100)));
+    require(_token.mint(teamTokenHolder, _tokenCap.mul(TEAM_PERCENTAGE).div(100)));
     require(_token.mint(platform, _tokenCap.mul(PLATFORM_PERCENTAGE).div(100)));
     _token.burn(_token.cap().sub(_token.totalSupply()));
 
@@ -94,6 +103,7 @@ contract HardcapCrowdsale is Ownable {
 
     Finalized();
 
+    finalizedTime = _getTime();
     isFinalized = true;
   }
 
@@ -154,13 +164,15 @@ contract HardcapCrowdsale is Ownable {
   }
 
   function _preValidatePurchase(address _beneficiary, uint256 _weiAmount) internal {
-    while (closingTime < _getTime() && closingTime < FINAL_CLOSING_TIME && phase < 8) {
+    if (closingTime < _getTime() && closingTime < FINAL_CLOSING_TIME && phase < 8) {
+      phase = phase.add(_calcPhasesPassed());
       _changeClosingTime();
-      phase = phase + 1;
+
     }
     require(_getTime() >= openingTime && _getTime() <= closingTime);
     require(_beneficiary != address(0));
     require(_weiAmount != 0);
+    require(phase <= 8);
 
     require(token.totalSupply() < ICO_TOKENS_CAP);
     require(!isFinalized);
@@ -171,6 +183,10 @@ contract HardcapCrowdsale is Ownable {
     if (closingTime > FINAL_CLOSING_TIME) {
       closingTime = FINAL_CLOSING_TIME;
     }
+  }
+
+  function _calcPhasesPassed() internal view returns(uint256) {
+    return  _getTime().sub(closingTime).div(10 days * 1000).add(1);
   }
 
  function _getTime() public view returns (uint256) {

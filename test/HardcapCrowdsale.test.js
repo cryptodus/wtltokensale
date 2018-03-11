@@ -157,15 +157,47 @@ contract('HardcapCrowdsaleTest', function (accounts) {
     it('should reveive correct amount (1240) of tokens when sending 1 ether for the 3\'rd phase date', async function () {
       await this.crowdsale.setCurrentTime(new Date('2018-04-20').getTime());
       await this.crowdsale.buyTokens(investor, { value: ether(1) });
-      let oTime = await this.crowdsale.openingTime();
-      let cTime = await this.crowdsale.closingTime();
-      let nTime = await this.crowdsale._getTime();
-
-      console.log(new Date(oTime.toNumber()));
-      console.log(new Date(cTime.toNumber()));
-      console.log(new Date(nTime.toNumber()));
       const balance = await this.token.balanceOf(investor);
       balance.should.be.bignumber.equal(1240e18);
+    });
+    it('should reveive correct amount (1190) of tokens when sending 1 ether for the 4\'th phase date', async function () {
+      await this.crowdsale.setCurrentTime(new Date('2018-04-30').getTime());
+      await this.crowdsale.buyTokens(investor, { value: ether(1) });
+      const balance = await this.token.balanceOf(investor);
+      balance.should.be.bignumber.equal(1190e18);
+    });
+    it('should reveive correct amount (1140) of tokens when sending 1 ether for the 5\'th phase date', async function () {
+      await this.crowdsale.setCurrentTime(new Date('2018-05-10').getTime());
+      await this.crowdsale.buyTokens(investor, { value: ether(1) });
+      const balance = await this.token.balanceOf(investor);
+      balance.should.be.bignumber.equal(1140e18);
+    });
+    it('should reveive correct amount (1090) of tokens when sending 1 ether for the 6\'th phase date', async function () {
+      await this.crowdsale.setCurrentTime(new Date('2018-05-20').getTime());
+      await this.crowdsale.buyTokens(investor, { value: ether(1) });
+      const balance = await this.token.balanceOf(investor);
+      balance.should.be.bignumber.equal(1090e18);
+    });
+    it('should reveive correct amount (1050) of tokens when sending 1 ether for the 7\'th phase date', async function () {
+      await this.crowdsale.setCurrentTime(new Date('2018-06-01').getTime());
+      await this.crowdsale.buyTokens(investor, { value: ether(1) });
+      const balance = await this.token.balanceOf(investor);
+      balance.should.be.bignumber.equal(1050e18);
+    });
+    it('should reveive correct amount (1000) of tokens when sending 1 ether for the 8\'th phase date', async function () {
+      await this.crowdsale.setCurrentTime(new Date('2018-06-10').getTime());
+      await this.crowdsale.buyTokens(investor, { value: ether(1) });
+      const balance = await this.token.balanceOf(investor);
+      balance.should.be.bignumber.equal(1000e18);
+    });
+    it('should reject purchase after the 8\'th phase date expired', async function () {
+      await this.crowdsale.setCurrentTime(new Date('2018-06-20').getTime());
+      try {
+          await this.crowdsale.buyTokens(investor, { value: ether(1) });
+          assert.fail('Expected reject not received');
+      } catch (error) {
+        assert(error.message.search('revert') > 0, 'Wrong error message received: ' + error.message);
+      }
     });
   });
 /*
