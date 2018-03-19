@@ -19,7 +19,7 @@ contract HardcapCrowdsale is Ownable {
 
   uint256 private constant ICO_TOKENS_CAP = 65 * 10**24;
 
-  uint256 private constant FINAL_CLOSING_TIME = 1528984800000;
+  uint256 private constant FINAL_CLOSING_TIME = 1528984800;
 
   uint256 public phase = 1;
 
@@ -33,8 +33,8 @@ contract HardcapCrowdsale is Ownable {
 
   bool public isFinalized = false;
 
-  uint256 public openingTime = 1522072800000;
-  uint256 public closingTime = 1522936800000;
+  uint256 public openingTime = 1522072800;
+  uint256 public closingTime = 1522936800;
   uint256 public finalizedTime;
 
   mapping (uint256 => Phase) private phases;
@@ -63,16 +63,16 @@ contract HardcapCrowdsale is Ownable {
       phases[8] = Phase(65 * 10**24, 1000);
   }
 
+  function () external payable {
+    buyTokens(msg.sender);
+  }
+
   /*
     contract for teams tokens lockup
   */
   function setTeamTokenHolder(address _teamTokenHolder) onlyOwner public {
     require(_teamTokenHolder != address(0));
     teamTokenHolder = _teamTokenHolder;
-  }
-
-  function () external payable {
-    buyTokens(msg.sender);
   }
 
   function buyTokens(address _beneficiary) public payable {
@@ -193,14 +193,14 @@ contract HardcapCrowdsale is Ownable {
   }
 
   function _changeClosingTime() internal {
-    closingTime = _getTime() + 10 days * 1000;
+    closingTime = _getTime() + 10 days;
     if (closingTime > FINAL_CLOSING_TIME) {
       closingTime = FINAL_CLOSING_TIME;
     }
   }
 
   function _calcPhasesPassed() internal view returns(uint256) {
-    return  _getTime().sub(closingTime).div(10 days * 1000).add(1);
+    return  _getTime().sub(closingTime).div(10 days).add(1);
   }
 
  function _getTime() internal view returns (uint256) {
