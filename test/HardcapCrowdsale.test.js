@@ -428,6 +428,27 @@ contract('HardcapCrowdsaleTest', function (accounts) {
       const platformBalance = await this.token.balanceOf(platform);
       platformBalance.should.be.bignumber.equal(25e24);
     });
+    it('should assign correct amount of tokens to team and platform when 1340 tokens are sold', async function () {
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
+      await this.crowdsale.buyTokens(investor, { value: ether(1) });
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-07-01').getTime() / 1000));
+      await this.crowdsale.setTeamTokenHolder(this.teamTokenHolder.address);
+      await this.crowdsale.finalize().should.be.fulfilled;
+      /*
+        at the end balances should be calculated this way
+       sold -> 1340 = 65% -> ~2061.5384 = 100%,
+       platfrom ->  ~515,385 = 25% and
+       team ->  ~206.1538 = 10%
+      */
+      const walletBalance = await this.token.balanceOf(wallet);
+      walletBalance.should.be.bignumber.equal(0);
+      const teamTokenHolderBalance = await this.token.balanceOf(this.teamTokenHolder.address);
+      teamTokenHolderBalance.should.be.bignumber.gt(206.15384e18);
+      teamTokenHolderBalance.should.be.bignumber.lt(206.15385e18);
+      const platformBalance = await this.token.balanceOf(platform);
+      platformBalance.should.be.bignumber.gt(515.384e18);
+      platformBalance.should.be.bignumber.lt(515.385e18);
+    });
     it('should transfer ownership when finallized', async function () {
       await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
       await this.crowdsale.buyTokens(investor, { value: ether(70000) });
@@ -444,13 +465,64 @@ contract('HardcapCrowdsaleTest', function (accounts) {
       let mintingFinished = await this.token.mintingFinished();
       mintingFinished.should.be.equal(true);
     });
-    it('should burn all leftovers when finallized', async function() {
+    it('should burn all tokens when 0 was baught and finallized', async function() {
       await this.crowdsale.setCurrentTime(Math.round(new Date('2018-07-01').getTime() / 1000));
       await this.crowdsale.setTeamTokenHolder(this.teamTokenHolder.address);
       await this.crowdsale.finalize().should.be.fulfilled;
       // nothing sold - everything gets burned
       let totalSupply = await this.token.totalSupply();
       totalSupply.should.be.bignumber.equal(0);
+    });
+    it('should burn all leftovers when 1340 was bought and finallized', async function() {
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
+      await this.crowdsale.buyTokens(investor, { value: ether(1) });
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-07-01').getTime() / 1000));
+      await this.crowdsale.setTeamTokenHolder(this.teamTokenHolder.address);
+      await this.crowdsale.finalize().should.be.fulfilled;
+      let totalSupply = await this.token.totalSupply();
+      /*
+        at the end totalSupply should be calculated this way
+       1340 = 65% -> ~2061.5384 = 100%,
+       ~515,385 = 25% and ~206.1538 = 10%
+       so totalSupply should be ~2061.5384
+      */
+      totalSupply.should.be.bignumber.gt(2061.5384e18);
+      totalSupply.should.be.bignumber.lt(2061.5385e18);
+    });
+    it('should not burn anything when all tokens get bought and finallized', async function() {
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
+      await this.crowdsale.buyTokens(investor, { value: ether(70000) });
+      await this.crowdsale.setTeamTokenHolder(this.teamTokenHolder.address);
+      await this.crowdsale.finalize().should.be.fulfilled;
+      let totalSupply = await this.token.totalSupply();
+      totalSupply.should.be.bignumber.eq(100e24);
+    });
+    it('should allow owner to burn tokens after finalization and change total supply', async function() {
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
+      await this.crowdsale.buyTokens(investor, { value: ether(70000) });
+      await this.crowdsale.setTeamTokenHolder(this.teamTokenHolder.address);
+      await this.crowdsale.finalize().should.be.fulfilled;
+      let totalSupply = await this.token.totalSupply();
+      totalSupply.should.be.bignumber.eq(100e24);
+      await this.token.burn(1e24, {from: investor});
+      totalSupply = await this.token.totalSupply();
+      totalSupply.should.be.bignumber.eq(99e24);
+    });
+    it('should not allow burn tokens if have none owned', async function() {
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
+      await this.crowdsale.buyTokens(investor, { value: ether(70000) });
+      await this.crowdsale.setTeamTokenHolder(this.teamTokenHolder.address);
+      await this.crowdsale.finalize().should.be.fulfilled;
+      let totalSupply = await this.token.totalSupply();
+      totalSupply.should.be.bignumber.eq(100e24);
+      try {
+          await this.token.burn(1e24, {from: purchaser});
+          assert.fail('Expected reject not received');
+      } catch (error) {
+        assert(error.message.search('revert') > 0, 'Wrong error message received: ' + error.message);
+      }
+      totalSupply = await this.token.totalSupply();
+      totalSupply.should.be.bignumber.eq(100e24);
     });
     it('should set finalized time when finalized', async function() {
       await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
@@ -467,6 +539,17 @@ contract('HardcapCrowdsaleTest', function (accounts) {
       await this.crowdsale.finalize().should.be.fulfilled;
       try {
           await this.crowdsale.finalize();
+          assert.fail('Expected reject not received');
+      } catch (error) {
+        assert(error.message.search('revert') > 0, 'Wrong error message received: ' + error.message);
+      }
+    });
+    it('should not allow buy tokens toke when finalized', async function() {
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-07-01').getTime() / 1000));
+      await this.crowdsale.setTeamTokenHolder(this.teamTokenHolder.address);
+      await this.crowdsale.finalize().should.be.fulfilled;
+      try {
+        await this.crowdsale.buyTokens(investor, { value: ether(70000) });
           assert.fail('Expected reject not received');
       } catch (error) {
         assert(error.message.search('revert') > 0, 'Wrong error message received: ' + error.message);
