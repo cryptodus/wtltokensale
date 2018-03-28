@@ -341,6 +341,54 @@ contract('HardcapCrowdsaleTest', function (accounts) {
     });
   });
 
+  describe('assign tokens in batches', function() {
+    it('should assign tokens to 2 investors in the 1st phase', async function() {
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
+      await this.crowdsale.assignTokensToMultipleInvestors([investor, purchaser], [ether(1), ether(1)]);
+      const investorBalance = await this.token.balanceOf(investor);
+      investorBalance.should.be.bignumber.equal(1340e18);
+      const purchaserBalance = await this.token.balanceOf(purchaser);
+      purchaserBalance.should.be.bignumber.equal(1340e18);
+      const phase = await this.crowdsale.phase();
+      phase.should.be.bignumber.equal(1);
+    });
+    it('should change phase when first investor buys all tokens from current phase', async function() {
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
+      await this.crowdsale.assignTokensToMultipleInvestors([investor, purchaser], [ether(10000), ether(1)]);
+      const purchaserBalance = await this.token.balanceOf(purchaser);
+      purchaserBalance.should.be.bignumber.equal(1290e18);
+      const phase = await this.crowdsale.phase();
+      phase.should.be.bignumber.equal(2);
+    });
+    it('should fail if assignment wei list is different size than investors list', async function() {
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
+      try {
+         await this.crowdsale.assignTokensToMultipleInvestors([investor, purchaser], [ether(1)]);
+         assert.fail('Expected reject not received');
+      } catch (error) {
+        assert(error.message.search('revert') > 0, 'Wrong error message received: ' + error.message);
+      }
+    });
+    it('should fail if assignment investors list is different size than wei list', async function() {
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
+      try {
+         await this.crowdsale.assignTokensToMultipleInvestors([investor], [ether(1), ether(1)]);
+         assert.fail('Expected reject not received');
+      } catch (error) {
+        assert(error.message.search('revert') > 0, 'Wrong error message received: ' + error.message);
+      }
+    });
+    it('should fail if there is not enough tokens for all investors', async function() {
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
+      try {
+         await this.crowdsale.assignTokensToMultipleInvestors([investor, purchaser], [ether(60000), ether(1)]);
+         assert.fail('Expected reject not received');
+      } catch (error) {
+        assert(error.message.search('revert') > 0, 'Wrong error message received: ' + error.message);
+      }
+    });
+  });
+
   describe('receive funds', function () {
     it('should forward funds to wallet when purchasing tokens', async function () {
       await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));

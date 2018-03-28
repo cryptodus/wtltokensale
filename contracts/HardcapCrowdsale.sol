@@ -80,6 +80,19 @@ contract HardcapCrowdsale is Ownable {
   }
 
   /*
+    It may be needed to assign tokens in batches if multiple clients invested
+    in any other crypto currency.
+    NOTE: this will fail if there are not enough tokens left for at least one investor.
+        for this to work all investors must get all their tokens.  
+  */
+  function assignTokensToMultipleInvestors(address[] _beneficiaries, uint256[] _weiAmounts) onlyOwner public {
+    require(_beneficiaries.length == _weiAmounts.length);
+    for (uint i = 0; i < _weiAmounts.length; i++) {
+      _processTokensPurchase(_beneficiaries[i], _weiAmounts[i]);
+    }
+  }
+
+  /*
     If investmend was made in bitcoins etc. owner can assign apropriate amount of
     tokens to the investor.
   */
