@@ -230,6 +230,13 @@ contract('HardcapCrowdsaleTest', function (accounts) {
       const phase = await this.crowdsale.phase();
       phase.should.be.bignumber.equal(8);
     });
+    it('should allow finalize when all tokens are sold with two transactions', async function () {
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
+      await this.crowdsale.buyTokens(investor, { value: ether(56385.217) });
+      await this.crowdsale.buyTokens(investor, { value: ether(1000) });
+      await this.crowdsale.setTeamTokenHolder(this.teamTokenHolder.address);
+      await this.crowdsale.finalize().should.be.fulfilled;
+    });
     it('should reject purchase after the 8\'th phase date expired', async function () {
       await this.crowdsale.setCurrentTime(Math.round(new Date('2018-06-20').getTime() / 1000));
       try {
@@ -402,7 +409,8 @@ contract('HardcapCrowdsaleTest', function (accounts) {
       const pre = await web3.eth.getBalance(wallet);
       await this.crowdsale.assignTokens(investor, ether(10));
       const post = await web3.eth.getBalance(wallet);
-      post.should.be.bignumber.equal(pre.toNumber());
+      post.should.be.bignumber.gt(pre.minus(ether(0.5)));
+      post.should.be.bignumber.lt(pre.plus(ether(0.5)));
     });
     it('should not return if sent too much and tokens are over', async function () {
       await this.crowdsale.setCurrentTime(Math.round(new Date('2018-03-28').getTime() / 1000));
@@ -434,6 +442,16 @@ contract('HardcapCrowdsaleTest', function (accounts) {
   });
 
   describe('finalize', function () {
+    it('should not allow set token holder twice', async function () {
+      await this.crowdsale.setCurrentTime(Math.round(new Date('2018-07-01').getTime() / 1000));
+      await this.crowdsale.setTeamTokenHolder(this.teamTokenHolder.address);
+      try {
+          await this.crowdsale.setTeamTokenHolder(this.teamTokenHolder.address);
+          assert.fail('Expected reject not received');
+      } catch (error) {
+        assert(error.message.search('revert') > 0, 'Wrong error message received: ' + error.message);
+      }
+    });
     it('should not allow finalize when team token holder not set', async function () {
       await this.crowdsale.setCurrentTime(Math.round(new Date('2018-07-01').getTime() / 1000));
       try {

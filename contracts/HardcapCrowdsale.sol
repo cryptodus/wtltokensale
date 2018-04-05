@@ -72,6 +72,8 @@ contract HardcapCrowdsale is Ownable {
   */
   function setTeamTokenHolder(address _teamTokenHolder) onlyOwner public {
     require(_teamTokenHolder != address(0));
+    // should allow set only once
+    require(teamTokenHolder == address(0));
     teamTokenHolder = _teamTokenHolder;
   }
 
@@ -83,7 +85,7 @@ contract HardcapCrowdsale is Ownable {
     It may be needed to assign tokens in batches if multiple clients invested
     in any other crypto currency.
     NOTE: this will fail if there are not enough tokens left for at least one investor.
-        for this to work all investors must get all their tokens.  
+        for this to work all investors must get all their tokens.
   */
   function assignTokensToMultipleInvestors(address[] _beneficiaries, uint256[] _weiAmounts) onlyOwner public {
     require(_beneficiaries.length == _weiAmounts.length);
@@ -163,7 +165,7 @@ contract HardcapCrowdsale is Ownable {
       _phase = phases[phase];
     }
 
-    require(_tokens >= MIN_TOKENS_TO_PURCHASE);
+    require(_tokens >= MIN_TOKENS_TO_PURCHASE || _currentSupply == ICO_TOKENS_CAP);
 
     // if phase changes forward the date of the next phase change by 10 days
     if (_phaseChanged) {
