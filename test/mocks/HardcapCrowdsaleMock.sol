@@ -6,8 +6,8 @@ contract HardcapCrowdsaleMock is HardcapCrowdsale {
 
   uint256 private currentTime;
 
-  function HardcapCrowdsaleMock(address _wallet, address _platform, HardcapToken _token) public
-    HardcapCrowdsale(_wallet, _platform, _token) {
+  function HardcapCrowdsaleMock(address _wallet, address _platform, address _assigner, HardcapToken _token) public
+    HardcapCrowdsale(_wallet, _platform, _assigner, _token) {
   }
 
   function setCurrentTime(uint256 _currentTime) public {
